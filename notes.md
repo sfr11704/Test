@@ -1,4 +1,46 @@
-谢谢您的澄清，我会根据您的要求调整 Python 脚本。下面是按照您的要求修改的脚本：
+import requests
+import json
+from datetime import datetime
+
+# 初始化变量
+api_url = "http://example.com/api/data"  # 示例 API URL
+proxy_address = "http://proxyserver:port"  # 代理地址，如果有
+custom_header_name = "X-Custom-Header"  # 示例头部名称
+custom_header_value = "ValuePart1 ValuePart2"  # 示例头部值
+page_size = 100
+total_pages = 10  # 假设有 10 页数据，这个值应根据实际情况获取
+
+# 用于存储所有 endpoints 数据
+output = []
+
+# 根据总页数循环获取数据
+for page in range(1, total_pages + 1):
+    search_from = (page - 1) * page_size
+    search_to = page * page_size
+    response = requests.post(api_url, 
+                             headers={custom_header_name: custom_header_value, "Content-Type": "application/json"},
+                             proxies={"http": proxy_address, "https": proxy_address},  # 如果不使用代理，可以去掉这一行
+                             json={"request_data": {"search_from": search_from, "search_to": search_to}})
+
+    if response.status_code == 200:
+        data = response.json().get('reply', {}).get('endpoints', [])
+        output.extend(data)
+    else:
+        print(f"Error: Response for page {page} is not valid JSON.")
+
+# 获取当前时间戳
+timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+# 创建最终的 JSON 对象并保存到文件
+final_json = {"timestamp": timestamp, "endpoints": output}
+with open('data.json', 'w') as json_file:
+    json.dump(final_json, json_file)
+
+print("数据保存到 data.json")
+
+
+
+
 
 ### 第 1 部分：获取数据并分类，并加入时间戳
 
