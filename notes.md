@@ -1,5 +1,94 @@
 
+要使用 TLS 认证方式来获取 HashiCorp Vault 的 Token，并验证 Token 的时效性，您可以在 `HashiCorpVaultClient` 类中添加一个额外的方法来处理这些任务。这个方法将使用客户端证书和私钥来进行 TLS 认证，并从 Vault 获取一个新的 Token。此外，您还可以添加一个方法来验证 Token 的时效性。
 
+以下是修改后的 `HashiCorpVaultClient` 类实现：
+
+```python
+import requests
+import logging
+import json
+
+class HashiCorpVaultClient:
+    def __init__(self, vault_addr, cert_path, private_key_path, role):
+        self.vault_addr = vault_addr
+        self.cert_path = cert_path
+        self.private_key_path = private_key_path
+        self.role = role
+        self.logger = logging.getLogger('my_app')
+        self.token = None
+
+    def authenticate(self):
+        url = f"{self.vault_addr}/v1/auth/cert/login"
+        cert = (self.cert_path, self.private_key_path)
+        
+        # 如果需要传递角色名，可以在payload中添加
+        payload = {'role': self.role} if self.role else {}
+
+        try:
+            response = requests.post(url, cert=cert, data=json.dumps(payload))
+            if response.status_code == 200:
+                self.token = response.json().get('auth', {}).get('client_token')
+                self.headers = {'X-Vault-Token': self.token}
+                return self.token
+            else:
+                self.logger.error("Failed to authenticate with Vault: %s", response.text)
+        except Exception as e:
+            self.logger.error("Error during Vault authentication: %s", str(e))
+
+        return None
+
+    def get_secret(self, secret_path):
+        if not self.token:
+            self.authenticate()
+        
+        url = f"{self.vault_addr}/v1/{secret_path}"
+        response = requests.get(url, headers=self.headers)
+
+        if response.status_code == 200:
+            return response.json().get('data', {}).get('data', {})
+        else:
+            self.logger.error("Error fetching secret from Vault: %s %s", response.status_code, response.text)
+            return None
+
+    def verify_token(self):
+        # 如果 token 为空，尝试重新认证
+        if not self.token:
+            self.authenticate()
+
+        url = f"{self.vault_addr}/v1/auth/token/lookup-self"
+        response = requests.get(url, headers=self.headers)
+        
+        if response.status_code == 200:
+            return response.json().get('data', {}).get('expire_time', None) is not None
+        else:
+            self.logger.error("Failed to verify Vault token: %s %s", response.status_code, response.text)
+            return False
+```
+
+### 使用方法：
+
+```python
+vault_addr = "https://your-vault-server:8200"
+cert_path = "/path/to/cert.pem"
+private_key_path = "/path/to/private_key.pem"
+role = "your_role_name"
+
+vault_client = HashiCorpVaultClient(vault_addr, cert_path, private_key_path, role)
+secret = vault_client.get_secret("path/to/your/secret")
+
+if secret is not None:
+    print("Secret:", secret)
+else:
+    print("Failed to get secret")
+```
+
+### 注意：
+
+- 确保证书和私钥的路径是正确的，并且它们的格式适用于 TLS 认证。
+- `role` 是在 Vault 中配置的特定角色，如果您的 Vault 设置需要指定角色来进行认证，请提供相应的角色名。
+- `verify_token` 方法会检查当前 Token 的有效性。如果 Token 无效或不存在，它将尝试重新认证。
+
+在使用此类之前，请确保您已正确配置了 Vault 以接受 TLS 认证，并且相关的证书和私钥是可用的。
 
 
 
