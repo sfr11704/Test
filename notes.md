@@ -1,3 +1,15 @@
+Here's the translation of the text into English for a presentation:
+
+Next, let me introduce our endpoint team as a pilot in the entire POC process. On one hand, we are standardizing the control health checklists for four different products within the endpoint team and converting them into a machine-readable format. We are providing this format to Splunk as the logical foundation for generating reports. (Since most of the KB updates have a lower frequency, during the pilot phase, we are manually providing the machine-readable calculation logic and checklists.)
+
+On the other hand, we are fully leveraging the capabilities of the XDR product to automate the process of obtaining and calculating various product control health metrics on each endpoint. Every day, we send the control health metrics of target machines in JSON format to Kafka, ultimately reaching Splunk. Currently, our pilot POC has shown initial effectiveness, and we can further refine the solution and improve the accuracy of the collected data. As a pilot, we believe we can provide a template and reference for the next steps of the plan.
+
+We manually pulled some data and found that there are still some gaps between the current data and real data. There are two reasons for this. First, there is an accuracy issue with Active Directory data in Splunk. As far as we know, there is some dirty data in AD, and we will continue to discuss specific solutions to address the accuracy issue of the dataset. Secondly, XDR portal retains some historical data, and how to clean and verify historical data will need further discussion and resolution.
+
+Why is the health ratio lower for the other three products?
+
+There are two reasons. First, the health status data for the other three products depends on the connectivity of the XDR agent. Second, the calculation logic for the other three products is different from the native XDR health calculation logic. XDR's native logic considers a machine healthy if it has a healthy history in the past 30 days. However, for the other products, as they query health metrics in real-time on each machine, if a machine loses connectivity, it goes into an unknown state, resulting in an unhealthy status. So, the health percentage on laptops will be lower compared to XDR. We will further discuss solutions to ensure criteria consistency.
+
 
 要使用 TLS 认证方式来获取 HashiCorp Vault 的 Token，并验证 Token 的时效性，您可以在 `HashiCorpVaultClient` 类中添加一个额外的方法来处理这些任务。这个方法将使用客户端证书和私钥来进行 TLS 认证，并从 Vault 获取一个新的 Token。此外，您还可以添加一个方法来验证 Token 的时效性。
 
