@@ -154,3 +154,52 @@ else
     log "因test3.py失败，脚本执行终止。"
     exit 1
 fi
+
+
+
+
+#### ======
+#!/bin/bash
+
+# 日志文件的基础路径
+LOGFILE="/var/log/my_application.log"
+
+# 日志轮转后的文件前缀
+LOGFILE_PREFIX="$LOGFILE.old"
+
+# 要保留的日志文件数量，这里是30天
+LOG_FILES_TO_KEEP=30
+
+# 执行日志轮转
+log_rotate() {
+    # 检查当前日志文件是否存在
+    if [ -f "$LOGFILE" ]; then
+        # 从最旧的日志文件开始，删除超过保留数量的文件
+        local counter=1
+        local old_log="${LOGFILE_PREFIX}.$((counter++))"
+        
+        # 找到所有旧日志文件，并删除超过保留数量的文件
+        while [ $counter -le $LOG_FILES_TO_KEEP ]; do
+            if [ -f "$old_log" ]; then
+                old_log="${LOGFILE_PREFIX}.$((counter++))"
+            else
+                break
+            fi
+        done
+
+        # 重命名当前的日志文件为最旧的日志文件名
+        mv "$LOGFILE" "${LOGFILE_PREFIX}.1"
+
+        # 如果有更旧的日志文件，按顺序重命名它们
+        for (( i=1; i<$LOG_FILES_TO_KEEP; i++ )); do
+            mv -n "${LOGFILE_PREFIX}.$i" "${LOGFILE_PREFIX}.$((i+1))"
+        done
+    fi
+}
+
+# 调用日志轮转函数
+log_rotate
+
+# 执行你的程序或脚本，并将输出写入日志文件
+# 你的程序或脚本应该调用这个脚本，或者将输出重定向到$LOGFILE
+# 例如: your_program >> "$LOGFILE" 2>&1
