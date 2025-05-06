@@ -1,0 +1,63 @@
+# 读取JSON文件
+$jsonPath = "input.json"
+$jsonContent = Get-Content -Raw -Path $jsonPath
+$data = $jsonContent | ConvertFrom-Json
+
+# 初始化指标存储
+$metrics = @()
+
+# 遍历每个主机数据
+foreach ($host in $data) {
+    # 定义基础标签
+    $labels = @{
+        host_type    = $host.host_type
+        domain       = $host.domain
+        cmdb_name    = $host.cmdb_name
+        endpoint_name = $host.endpoint_name
+    }
+
+    # 处理基础指标
+    $metrics += "windows_bitlocker_host_info{`n"
+    $labels.GetEnumerator() | ForEach-Object {
+        $metrics += "`t$($_.Key)=`"$($_.Value)`""
+    }
+    $metrics += "`n}`n"
+
+    # 处理TPM相关指标
+    $tpmMetrics = @("tpm_enabled", "tpm_activated", "tpm_present", "tpm_ready")
+    foreach ($metric in $tpmMetrics) {
+        $value = if ($host.$metric -eq $true) { 1 } else { 0 }
+        $metrics += "windows_bitlocker_${metric}{`n"
+        $labels.GetEnumerator() | ForEach-Object {
+            $metrics += "`t$($_.Key)=`"$($_.Value)`""
+        }
+        $metrics += "`n}$value`n"
+    }
+
+    # 处理状态指标
+    $statusMetrics = @(
+        "protection_status", 
+        "volume_status", 
+        "bdesvc_status", 
+        "control_health", 
+        "execution_status"
+    )
+    foreach ($metric in $statusMetrics) {
+        $value = if ([bool]::TryParse($host.$metric, [ref]$null)) { 
+            [int]($host.$metric) 
+        } else { 
+            0 
+        }
+        $metrics += "windows_bitlocker_${metric}{`n"
+        $labels.GetEnumerator() | ForEach-Object {
+            $metrics += "`t$($_.Key)=`"$($_.Value)`""
+        }
+        $metrics += "`n}$value`n"
+    }
+}
+
+# 保存到文件
+$outputPath = "bitlocker.prom"
+$metrics -join "`n" | Set-Content -Path $outputPath
+
+Write-Host "转换完成，生成文件：$outputPath"
