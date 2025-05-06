@@ -1,0 +1,200 @@
+
+
+# 读取JSON文件
+$jsonPath = "input.json"
+$jsonContent = Get-Content -Raw -Path $jsonPath
+$data = $jsonContent | ConvertFrom-Json
+
+# 初始化指标存储
+$metrics = @()
+
+# 遍历每个主机数据
+foreach ($host in $data) {
+    # 提取所有原始标签
+    $labels = @{}
+    $host.PSObject.Properties | Where-Object { $_.MemberType -eq 'NoteProperty' } | ForEach-Object {
+        $labels[$_."Name"] = $_."Value"
+    }
+
+    # 处理基础指标（保留原始值）
+    $metrics += "windows_bitlocker_host_info{`n"
+    $labels.GetEnumerator() | ForEach-Object {
+        $metrics += "`t$($_.Key)=`"$($_.Value)`""
+    }
+    $metrics += "`n}`n"
+
+    # 处理TPM指标（保留原始值）
+    $tpmMetrics = @("tpm_enabled", "tpm_activated", "tpm_present", "tpm_ready")
+    foreach ($metric in $tpmMetrics) {
+        $value = if ($labels.ContainsKey($metric)) { $labels[$metric] } else { $null }
+        $metrics += "windows_bitlocker_${metric}{`n"
+        $labels.GetEnumerator() | ForEach-Object {
+            $metrics += "`t$($_.Key)=`"$($_.Value)`""
+        }
+        $metrics += "`n}`$value`n"
+    }
+
+    # 处理状态指标（保留原始值）
+    $statusMetrics = @(
+        "protection_status", 
+        "volume_status", 
+        "bdesvc_status", 
+        "control_health", 
+        "execution_status"
+    )
+    foreach ($metric in $statusMetrics) {
+        $value = if ($labels.ContainsKey($metric)) { $labels[$metric] } else { $null }
+        $metrics += "windows_bitlocker_${metric}{`n"
+        $labels.GetEnumerator() | ForEach-Object {
+            $metrics += "`t$($_.Key)=`"$($_.Value)`""
+        }
+        $metrics += "`n}`$value`n"
+    }
+}
+
+# 保存到文件
+$outputPath = "bitlocker.prom"
+$metrics -join "`n" | Set-Content -Path $outputPath
+
+Write-Host "转换完成，生成文件：$outputPath"
+
+
+
+
+
+—————————————-
+
+
+# Windows Defender 指标
+windows_defender_info{
+    host_type="Windows Server"
+    domain="codx.mdex.ms.com.cn"
+    endpoint_status="CONNECTED"
+    product="Defender"
+    endpoint_id="1c1ba9a6a97142d4a1712d08dd40e59a"
+    antivirus_signature_age=1
+    am_product_version="1.47.404.0"
+    antivirus_signature_version="1.427.404.0"
+    cndb_name="bjvhdh001.codx.mds.com.cn"
+    defender_service_status=1  # Running=1
+    endpoint_name="bjvbwjho01"
+    install_status=1  # Installed=1
+    execution_status=1  # COMPLETED_SUCCESSFULLY=1
+    control_health=1  # Yes=1
+}
+
+# Defendpoint 指标
+defendpoint_info{
+    host_type="Windows Desktop"
+    domain="cod.ms.com.cn"
+    endpoint_status="CONNECTED"
+    product="Defendpoint"
+    endpoint_id="dskbjcbaudit007"
+    drift_cause=NULL  # 原始数据为null
+    appcontrol_version="20250121"
+    product_version="23.7.131.0"
+    client_protection_state=1  # Protected=1
+    execution_status=1  # COMPLETED_SUCCESSFULLY=1
+    install_status=1
+    operational_status=1  # Protected=1
+    isolated_status=0  # Unsigned=0
+    endpoint_type="AGENT TYPE容器"
+}
+
+# XDR 指标
+xdr_info{
+    host_type="Windows Server"
+    domain="codx.mdex.mdex-ms.com.cn"
+    endpoint_version="8.7.0.7735"
+    os_version="Windows Server 2019"
+    scan_status=1  # SUCCESS=1
+    install_date=1742178131  # 毫秒转秒
+    last_seen=45771.874717592
+    content_status=1  # UP_to_DATE=1
+    operational_status=1  # PROTECTED=1
+    isolated_status=0  # UNSIGNED=0
+    endpoint_type="AGENT TYPE容器"
+}
+——————————
+
+# 定义输入输出路径
+$inputDir = "json_files"
+$outputDir = "prom_metrics"
+$metricPrefix = "windows_security"
+
+# 创建输出目录
+New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+
+# 定义指标映射规则
+$metricRules = @(
+    @{Name="tpm_enabled"; Type="Gauge"; ValueMap=@{true=1; false=0}},
+    @{Name="protection_status"; Type="Gauge"; ValueMap=@{"enabled"=1; "disabled"=0}},
+    @{Name="volume_status"; Type="Gauge"; ValueMap=@{1=1; 0=0}},
+    @{Name="service_status"; Type="Gauge"; ValueMap=@{"Running"=1; "Stopped"=0}}
+)
+
+# 处理每个JSON文件
+Get-ChildItem -Path $inputDir -Filter *.json | ForEach-Object {
+    $jsonPath = $_.FullName
+    $outputPath = Join-Path $outputDir ($_.BaseName + ".prom")
+    
+    # 解析JSON
+    $data = Get-Content $jsonPath -Raw | ConvertFrom-Json
+    
+    # 初始化指标集合
+    $metrics = @()
+    
+    # 提取所有标签
+    $labels = @{}
+    $data.PSObject.Properties | Where-Object { $_.MemberType -eq 'NoteProperty' } | ForEach-Object {
+        $labels[$_."Name"] = $_."Value"
+    }
+    
+    # 生成基础指标
+    $metrics += Generate-Metric -Name "$metricPrefix_host_info" -Labels $labels -Value 1
+    
+    # 处理规则定义的指标
+    foreach ($rule in $metricRules) {
+        $metricName = $rule.Name
+        $value = $data.$metricName
+        
+        # 类型转换
+        switch ($rule.Type) {
+            "Gauge" {
+                $metricValue = if ($rule.ValueMap.ContainsKey($value)) {
+                    $rule.ValueMap[$value]
+                } else {
+                    [int]::Parse($value)
+                }
+            }
+            default { $metricValue = $value }
+        }
+        
+        # 生成指标行
+        $metrics += "windows_security_${metricName}{`n"
+        $labels.GetEnumerator() | ForEach-Object {
+            $metrics += "`t$($_.Key)=`"$($_.Value)`""
+        }
+        $metrics += "`n}${metricValue}`n"
+    }
+    
+    # 写入文件
+    $metrics -join "`n" | Set-Content $outputPath
+}
+
+# 辅助函数：生成指标行
+function Generate-Metric {
+    param(
+        [string]$Name,
+        [hashtable]$Labels,
+        [int]$Value
+    )
+    $metric = "$Name{`n"
+    $Labels.GetEnumerator() | ForEach-Object {
+        $metric += "`t$($_.Key)=`"$($_.Value)`""
+    }
+    $metric += "`n}${Value}`n"
+    return $metric
+}
+
+Write-Host "转换完成，生成文件：$outputDir\*.prom"
